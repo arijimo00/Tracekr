@@ -1,0 +1,1024 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import { Calendar, Users, Briefcase, LayoutDashboard, LogOut, Download, Plus, X, Edit2, Save, ChevronDown, ChevronUp, Menu, UserCircle } from 'lucide-react';
+
+// Mock Firebase functions (replace with actual Firebase SDK)
+const mockFirebase = {
+  auth: {
+    currentUser: null,
+    signOut: async () => console.log('Signed out'),
+  },
+  db: {
+    collection: () => ({
+      doc: () => ({
+        set: async (data) => console.log('Saved:', data),
+        get: async () => ({ exists: true, data: () => ({}) }),
+        update: async (data) => console.log('Updated:', data),
+      }),
+      where: () => ({
+        get: async () => ({ docs: [] }),
+      }),
+    }),
+  },
+};
+
+const App = () => {
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [currentUser, setCurrentUser] = useState(null);
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  
+  // Data states
+  const [projects, setProjects] = useState([]);
+  const [accounts, setAccounts] = useState([]);
+  const [resources, setResources] = useState([]);
+  const [databaseKey, setDatabaseKey] = useState('');
+
+  // User Management
+  const handleLogin = (username, dbKey) => {
+    const user = { username, dbKey, id: Date.now().toString() };
+    setCurrentUser(user);
+    setDatabaseKey(dbKey);
+    localStorage.setItem('currentUser', JSON.stringify(user));
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    localStorage.removeItem('currentUser');
+    setDatabaseKey('');
+  };
+
+  const downloadUserDetails = () => {
+    const userDetails = {
+      username: currentUser?.username,
+      databaseKey: databaseKey,
+      userId: currentUser?.id,
+      exportDate: new Date().toISOString()
+    };
+    
+    const blob = new Blob([JSON.stringify(userDetails, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `user_details_${currentUser?.username}_${Date.now()}.json`;
+    a.click();
+  };
+
+  useEffect(() => {
+    const savedUser = localStorage.getItem('currentUser');
+    if (savedUser) {
+      const user = JSON.parse(savedUser);
+      setCurrentUser(user);
+      setDatabaseKey(user.dbKey);
+    }
+  }, []);
+
+  if (!currentUser) {
+    return <LoginScreen onLogin={handleLogin} />;
+  }
+
+  const renderContent = () => {
+    switch (activeTab) {
+      case 'dashboard':
+        return <DashboardEntry projects={projects} setProjects={setProjects} accounts={accounts} resources={resources} />;
+      case 'accounts':
+        return <AccountDashboard accounts={accounts} setAccounts={setAccounts} projects={projects} />;
+      case 'timeline':
+        return <TimelineDashboard projects={projects} resources={resources} />;
+      case 'resources':
+        return <ResourceTab resources={resources} setResources={setResources} />;
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <div className="flex h-screen bg-gray-50">
+      {/* Sidebar */}
+      <div className={`${sidebarOpen ? 'w-64' : 'w-16'} transition-all duration-300 bg-white shadow-lg flex flex-col`}>
+        <div className="p-4 border-b">
+          <button 
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            className="w-full flex justify-center text-gray-600 hover:text-gray-800"
+          >
+            <Menu className="w-6 h-6" />
+          </button>
+        </div>
+        
+        <nav className="flex-1 p-4">
+          <button
+            onClick={() => setActiveTab('dashboard')}
+            className={`w-full flex items-center gap-3 p-3 rounded-lg transition-colors ${
+              activeTab === 'dashboard' ? 'bg-blue-50 text-blue-600' : 'text-gray-600 hover:bg-gray-100'
+            }`}
+          >
+            <LayoutDashboard className="w-5 h-5" />
+            {sidebarOpen && <span>Dashboard Entry</span>}
+          </button>
+          
+          <button
+            onClick={() => setActiveTab('accounts')}
+            className={`w-full flex items-center gap-3 p-3 rounded-lg transition-colors mt-2 ${
+              activeTab === 'accounts' ? 'bg-blue-50 text-blue-600' : 'text-gray-600 hover:bg-gray-100'
+            }`}
+          >
+            <Briefcase className="w-5 h-5" />
+            {sidebarOpen && <span>Account Dashboard</span>}
+          </button>
+          
+          <button
+            onClick={() => setActiveTab('timeline')}
+            className={`w-full flex items-center gap-3 p-3 rounded-lg transition-colors mt-2 ${
+              activeTab === 'timeline' ? 'bg-blue-50 text-blue-600' : 'text-gray-600 hover:bg-gray-100'
+            }`}
+          >
+            <Calendar className="w-5 h-5" />
+            {sidebarOpen && <span>Timeline Dashboard</span>}
+          </button>
+          
+          <button
+            onClick={() => setActiveTab('resources')}
+            className={`w-full flex items-center gap-3 p-3 rounded-lg transition-colors mt-2 ${
+              activeTab === 'resources' ? 'bg-blue-50 text-blue-600' : 'text-gray-600 hover:bg-gray-100'
+            }`}
+          >
+            <Users className="w-5 h-5" />
+            {sidebarOpen && <span>Resources</span>}
+          </button>
+        </nav>
+        
+        {/* User Menu */}
+        <div className="p-4 border-t relative">
+          <button
+            onClick={() => setShowUserMenu(!showUserMenu)}
+            className="w-full flex items-center gap-3 p-3 rounded-lg text-gray-600 hover:bg-gray-100"
+          >
+            <UserCircle className="w-5 h-5" />
+            {sidebarOpen && <span>{currentUser?.username}</span>}
+          </button>
+          
+          {showUserMenu && (
+            <div className="absolute bottom-full left-4 right-4 mb-2 bg-white shadow-lg rounded-lg p-2">
+              <button
+                onClick={downloadUserDetails}
+                className="w-full flex items-center gap-2 p-2 text-gray-600 hover:bg-gray-100 rounded"
+              >
+                <Download className="w-4 h-4" />
+                <span className="text-sm">Download Details</span>
+              </button>
+              <button
+                onClick={handleLogout}
+                className="w-full flex items-center gap-2 p-2 text-red-600 hover:bg-red-50 rounded"
+              >
+                <LogOut className="w-4 h-4" />
+                <span className="text-sm">Logout</span>
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+      
+      {/* Main Content */}
+      <div className="flex-1 overflow-auto">
+        <div className="p-6">
+          {renderContent()}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Login Screen Component
+const LoginScreen = ({ onLogin }) => {
+  const [username, setUsername] = useState('');
+  const [databaseKey, setDatabaseKey] = useState('');
+  const [isNewUser, setIsNewUser] = useState(true);
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (username && databaseKey) {
+      onLogin(username, databaseKey);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="bg-white p-8 rounded-lg shadow-lg w-96">
+        <h2 className="text-2xl font-bold mb-6 text-center">
+          {isNewUser ? 'Create Account' : 'Login'}
+        </h2>
+        <form onSubmit={handleSubmit}>
+          <input
+            type="text"
+            placeholder="Username"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            className="w-full p-3 border rounded-lg mb-4"
+            required
+          />
+          <input
+            type="password"
+            placeholder="Firebase Database Key"
+            value={databaseKey}
+            onChange={(e) => setDatabaseKey(e.target.value)}
+            className="w-full p-3 border rounded-lg mb-6"
+            required
+          />
+          <button
+            type="submit"
+            className="w-full bg-blue-600 text-white p-3 rounded-lg hover:bg-blue-700"
+          >
+            {isNewUser ? 'Create Account' : 'Login'}
+          </button>
+        </form>
+        <p className="mt-4 text-center text-sm text-gray-600">
+          {isNewUser ? 'Already have an account?' : 'Need an account?'}
+          <button
+            onClick={() => setIsNewUser(!isNewUser)}
+            className="ml-2 text-blue-600 hover:underline"
+          >
+            {isNewUser ? 'Login' : 'Create Account'}
+          </button>
+        </p>
+      </div>
+    </div>
+  );
+};
+
+// Dashboard Entry Component
+const DashboardEntry = ({ projects, setProjects, accounts, resources }) => {
+  const [formData, setFormData] = useState({
+    serialNumber: '',
+    account: '',
+    primaryStakeholder: '',
+    secondaryStakeholders: [],
+    accountPoc: '',
+    projectName: '',
+    projectResources: [],
+    anticipatedBandwidth: '',
+    status: 'received',
+    deliveryType: 'single',
+    deliveryTimeline: '',
+    draupCcSrNo: '',
+    notes: ''
+  });
+
+  const [filters, setFilters] = useState({});
+
+  const statuses = ['received', 'first response', 'in pipeline', 'in progress', 'delivered', 'on pause'];
+
+  const calculateSuggestedTimeline = () => {
+    if (!formData.projectResources.length || !formData.anticipatedBandwidth) return '';
+    
+    const resourceCount = formData.projectResources.length;
+    const bandwidth = parseInt(formData.anticipatedBandwidth);
+    const adjustedDays = Math.ceil(bandwidth / resourceCount) + 1; // +1 day buffer
+    
+    const startDate = new Date();
+    const endDate = new Date(startDate);
+    endDate.setDate(endDate.getDate() + adjustedDays);
+    
+    return endDate.toISOString().split('T')[0];
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    const newProject = {
+      ...formData,
+      id: Date.now().toString(),
+      createdAt: new Date().toISOString(),
+      suggestedTimeline: calculateSuggestedTimeline()
+    };
+    setProjects([...projects, newProject]);
+    setFormData({
+      serialNumber: '',
+      account: '',
+      primaryStakeholder: '',
+      secondaryStakeholders: [],
+      accountPoc: '',
+      projectName: '',
+      projectResources: [],
+      anticipatedBandwidth: '',
+      status: 'received',
+      deliveryType: 'single',
+      deliveryTimeline: '',
+      draupCcSrNo: '',
+      notes: ''
+    });
+  };
+
+  const filteredProjects = projects.filter(project => {
+    return Object.entries(filters).every(([key, value]) => {
+      if (!value) return true;
+      return project[key]?.toString().toLowerCase().includes(value.toLowerCase());
+    });
+  });
+
+  return (
+    <div>
+      <h2 className="text-2xl font-bold mb-6">Dashboard Entry</h2>
+      
+      {/* Form */}
+      <form onSubmit={handleSubmit} className="bg-white p-6 rounded-lg shadow mb-6">
+        <div className="grid grid-cols-2 gap-4">
+          <input
+            type="text"
+            placeholder="Serial Number"
+            value={formData.serialNumber}
+            onChange={(e) => setFormData({...formData, serialNumber: e.target.value})}
+            className="p-2 border rounded"
+            required
+          />
+          
+          <select
+            value={formData.account}
+            onChange={(e) => setFormData({...formData, account: e.target.value})}
+            className="p-2 border rounded"
+            required
+          >
+            <option value="">Select Account</option>
+            {accounts.map(acc => (
+              <option key={acc.id} value={acc.name}>{acc.name}</option>
+            ))}
+          </select>
+          
+          <select
+            value={formData.primaryStakeholder}
+            onChange={(e) => setFormData({...formData, primaryStakeholder: e.target.value})}
+            className="p-2 border rounded"
+          >
+            <option value="">Select Primary Stakeholder</option>
+            {accounts.find(a => a.name === formData.account)?.stakeholders?.map(s => (
+              <option key={s.id} value={s.name}>{s.name}</option>
+            ))}
+          </select>
+          
+          <select
+            multiple
+            value={formData.secondaryStakeholders}
+            onChange={(e) => setFormData({...formData, secondaryStakeholders: Array.from(e.target.selectedOptions, option => option.value)})}
+            className="p-2 border rounded"
+          >
+            {accounts.find(a => a.name === formData.account)?.stakeholders?.map(s => (
+              <option key={s.id} value={s.name}>{s.name}</option>
+            ))}
+          </select>
+          
+          <input
+            type="text"
+            placeholder="Account POC"
+            value={formData.accountPoc}
+            className="p-2 border rounded bg-gray-100"
+            disabled
+          />
+          
+          <input
+            type="text"
+            placeholder="Project Name"
+            value={formData.projectName}
+            onChange={(e) => setFormData({...formData, projectName: e.target.value})}
+            className="p-2 border rounded"
+            required
+          />
+          
+          <select
+            multiple
+            value={formData.projectResources}
+            onChange={(e) => setFormData({...formData, projectResources: Array.from(e.target.selectedOptions, option => option.value)})}
+            className="p-2 border rounded"
+          >
+            {resources.map(r => (
+              <option key={r.id} value={r.name}>{r.name}</option>
+            ))}
+          </select>
+          
+          <input
+            type="number"
+            placeholder="Anticipated Bandwidth (days)"
+            value={formData.anticipatedBandwidth}
+            onChange={(e) => setFormData({...formData, anticipatedBandwidth: e.target.value})}
+            className="p-2 border rounded"
+            required
+          />
+          
+          <select
+            value={formData.status}
+            onChange={(e) => setFormData({...formData, status: e.target.value})}
+            className="p-2 border rounded"
+          >
+            {statuses.map(status => (
+              <option key={status} value={status}>{status}</option>
+            ))}
+          </select>
+          
+          <div>
+            <select
+              value={formData.deliveryType}
+              onChange={(e) => setFormData({...formData, deliveryType: e.target.value})}
+              className="p-2 border rounded mb-2 w-full"
+            >
+              <option value="single">Single Delivery</option>
+              <option value="multi">Multi-phase Delivery</option>
+            </select>
+            <input
+              type="date"
+              value={formData.deliveryTimeline}
+              onChange={(e) => setFormData({...formData, deliveryTimeline: e.target.value})}
+              className="p-2 border rounded w-full"
+              placeholder={`Suggested: ${calculateSuggestedTimeline()}`}
+            />
+          </div>
+          
+          <input
+            type="text"
+            placeholder="Draup CC SR No"
+            value={formData.draupCcSrNo}
+            onChange={(e) => setFormData({...formData, draupCcSrNo: e.target.value})}
+            className="p-2 border rounded"
+          />
+          
+          <textarea
+            placeholder="Notes"
+            value={formData.notes}
+            onChange={(e) => setFormData({...formData, notes: e.target.value})}
+            className="p-2 border rounded col-span-2"
+            rows="3"
+          />
+        </div>
+        
+        <button type="submit" className="mt-4 bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700">
+          Add Project
+        </button>
+      </form>
+      
+      {/* Projects Table */}
+      <div className="bg-white rounded-lg shadow overflow-hidden">
+        <table className="w-full">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="p-3 text-left">Serial No</th>
+              <th className="p-3 text-left">Account</th>
+              <th className="p-3 text-left">Project Name</th>
+              <th className="p-3 text-left">Status</th>
+              <th className="p-3 text-left">Delivery Timeline</th>
+              <th className="p-3 text-left">Resources</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredProjects.map(project => (
+              <tr key={project.id} className="border-t">
+                <td className="p-3">{project.serialNumber}</td>
+                <td className="p-3">{project.account}</td>
+                <td className="p-3">{project.projectName}</td>
+                <td className="p-3">
+                  <span className={`px-2 py-1 rounded text-sm ${
+                    project.status === 'delivered' ? 'bg-green-100 text-green-800' :
+                    project.status === 'in progress' ? 'bg-blue-100 text-blue-800' :
+                    'bg-gray-100 text-gray-800'
+                  }`}>
+                    {project.status}
+                  </span>
+                </td>
+                <td className="p-3">{project.deliveryTimeline}</td>
+                <td className="p-3">{project.projectResources.join(', ')}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
+// Account Dashboard Component
+const AccountDashboard = ({ accounts, setAccounts, projects }) => {
+  const [showAddAccount, setShowAddAccount] = useState(false);
+  const [newAccount, setNewAccount] = useState({ name: '', stakeholders: [] });
+  const [expandedAccount, setExpandedAccount] = useState(null);
+
+  const addAccount = () => {
+    if (newAccount.name) {
+      setAccounts([...accounts, { ...newAccount, id: Date.now().toString() }]);
+      setNewAccount({ name: '', stakeholders: [] });
+      setShowAddAccount(false);
+    }
+  };
+
+  const addStakeholder = (accountId) => {
+    const updatedAccounts = accounts.map(acc => {
+      if (acc.id === accountId) {
+        return {
+          ...acc,
+          stakeholders: [...(acc.stakeholders || []), {
+            id: Date.now().toString(),
+            name: '',
+            email: '',
+            notes: '',
+            isPrimary: false
+          }]
+        };
+      }
+      return acc;
+    });
+    setAccounts(updatedAccounts);
+  };
+
+  const updateStakeholder = (accountId, stakeholderId, field, value) => {
+    const updatedAccounts = accounts.map(acc => {
+      if (acc.id === accountId) {
+        return {
+          ...acc,
+          stakeholders: acc.stakeholders.map(s => 
+            s.id === stakeholderId ? { ...s, [field]: value } : s
+          )
+        };
+      }
+      return acc;
+    });
+    setAccounts(updatedAccounts);
+  };
+
+  const getAccountProjects = (accountName) => {
+    return projects.filter(p => p.account === accountName);
+  };
+
+  return (
+    <div>
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-2xl font-bold">Account Dashboard</h2>
+        <button
+          onClick={() => setShowAddAccount(true)}
+          className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 flex items-center gap-2"
+        >
+          <Plus className="w-4 h-4" />
+          Add Account
+        </button>
+      </div>
+      
+      {/* Add Account Modal */}
+      {showAddAccount && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg w-96">
+            <h3 className="text-lg font-semibold mb-4">Add New Account</h3>
+            <input
+              type="text"
+              placeholder="Account Name"
+              value={newAccount.name}
+              onChange={(e) => setNewAccount({...newAccount, name: e.target.value})}
+              className="w-full p-2 border rounded mb-4"
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={addAccount}
+                className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+              >
+                Add
+              </button>
+              <button
+                onClick={() => setShowAddAccount(false)}
+                className="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Account Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {accounts.map(account => {
+          const accountProjects = getAccountProjects(account.name);
+          const activeProjects = accountProjects.filter(p => p.status !== 'delivered');
+          
+          return (
+            <div key={account.id} className="bg-white p-4 rounded-lg shadow">
+              <div className="flex justify-between items-start mb-4">
+                <h3 className="text-lg font-semibold">{account.name}</h3>
+                <button
+                  onClick={() => setExpandedAccount(expandedAccount === account.id ? null : account.id)}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  {expandedAccount === account.id ? <ChevronUp /> : <ChevronDown />}
+                </button>
+              </div>
+              
+              <div className="space-y-2 text-sm">
+                <p><strong>Active Projects:</strong> {activeProjects.length}</p>
+                {activeProjects.slice(0, 2).map(project => (
+                  <div key={project.id} className="pl-4">
+                    <p>• {project.projectName} - {project.status}</p>
+                    <p className="text-gray-600 text-xs">Delivery: {project.deliveryTimeline}</p>
+                  </div>
+                ))}
+              </div>
+              
+              {expandedAccount === account.id && (
+                <div className="mt-4 border-t pt-4">
+                  <div className="flex justify-between items-center mb-2">
+                    <h4 className="font-medium">Stakeholders</h4>
+                    <button
+                      onClick={() => addStakeholder(account.id)}
+                      className="text-blue-600 hover:text-blue-800"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  </div>
+                  
+                  {account.stakeholders?.map(stakeholder => (
+                    <div key={stakeholder.id} className="bg-gray-50 p-3 rounded mb-2">
+                      <input
+                        type="text"
+                        placeholder="Name"
+                        value={stakeholder.name}
+                        onChange={(e) => updateStakeholder(account.id, stakeholder.id, 'name', e.target.value)}
+                        className="w-full p-1 border rounded mb-1"
+                      />
+                      <input
+                        type="email"
+                        placeholder="Email"
+                        value={stakeholder.email}
+                        onChange={(e) => updateStakeholder(account.id, stakeholder.id, 'email', e.target.value)}
+                        className="w-full p-1 border rounded mb-1"
+                      />
+                      <textarea
+                        placeholder="Notes"
+                        value={stakeholder.notes}
+                        onChange={(e) => updateStakeholder(account.id, stakeholder.id, 'notes', e.target.value)}
+                        className="w-full p-1 border rounded mb-1"
+                        rows="2"
+                      />
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={stakeholder.isPrimary}
+                          onChange={(e) => updateStakeholder(account.id, stakeholder.id, 'isPrimary', e.target.checked)}
+                        />
+                        <span className="text-sm">Primary POC</span>
+                      </label>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+// Timeline Dashboard Component
+const TimelineDashboard = ({ projects, resources }) => {
+  const calculateResourceUtilization = useMemo(() => {
+    const utilization = {};
+    const today = new Date();
+    
+    projects.forEach(project => {
+      if (project.status === 'delivered' || project.status === 'on pause') return;
+      
+      const endDate = new Date(project.deliveryTimeline);
+      const duration = Math.ceil((endDate - today) / (1000 * 60 * 60 * 24));
+      
+      project.projectResources?.forEach(resourceName => {
+        if (!utilization[resourceName]) {
+          utilization[resourceName] = [];
+        }
+        
+        utilization[resourceName].push({
+          project: project.projectName,
+          startDate: today,
+          endDate: endDate,
+          duration: duration,
+          bandwidth: parseInt(project.anticipatedBandwidth) || 0
+        });
+      });
+    });
+    
+    return utilization;
+  }, [projects]);
+
+  const getResourceEfficiency = (resourceName) => {
+    const resource = resources.find(r => r.name === resourceName);
+    const level = resource?.level || 0;
+    return 1 + (level * 0.2);
+  };
+
+  const calculateAnticipatedTimeline = (project) => {
+    const resourceCount = project.projectResources?.length || 1;
+    const bandwidth = parseInt(project.anticipatedBandwidth) || 0;
+    const avgEfficiency = project.projectResources?.reduce((sum, r) => sum + getResourceEfficiency(r), 0) / resourceCount || 1;
+    
+    const adjustedDays = Math.ceil((bandwidth / resourceCount) / avgEfficiency) + 1;
+    
+    const startDate = new Date();
+    const endDate = new Date(startDate);
+    endDate.setDate(endDate.getDate() + adjustedDays);
+    
+    return endDate;
+  };
+
+  const [hoveredProject, setHoveredProject] = useState(null);
+
+  return (
+    <div>
+      <h2 className="text-2xl font-bold mb-6">Timeline Dashboard</h2>
+      
+      {/* Gantt Chart */}
+      <div className="bg-white p-6 rounded-lg shadow">
+        <div className="overflow-x-auto">
+          <div className="min-w-[800px]">
+            {/* Timeline Header */}
+            <div className="flex border-b pb-2 mb-4">
+              <div className="w-48 font-medium">Project</div>
+              <div className="flex-1 flex">
+                {Array.from({ length: 30 }, (_, i) => {
+                  const date = new Date();
+                  date.setDate(date.getDate() + i);
+                  return (
+                    <div key={i} className="flex-1 text-center text-xs text-gray-600">
+                      {date.getDate()}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            
+            {/* Project Timelines */}
+            {projects
+              .filter(p => p.status !== 'delivered' && p.status !== 'on pause')
+              .map(project => {
+                const today = new Date();
+                const committedEnd = new Date(project.deliveryTimeline);
+                const anticipatedEnd = calculateAnticipatedTimeline(project);
+                
+                const committedDays = Math.ceil((committedEnd - today) / (1000 * 60 * 60 * 24));
+                const anticipatedDays = Math.ceil((anticipatedEnd - today) / (1000 * 60 * 60 * 24));
+                
+                return (
+                  <div key={project.id} className="flex items-center mb-3">
+                    <div className="w-48 pr-4 text-sm truncate">{project.projectName}</div>
+                    <div className="flex-1 relative h-12">
+                      {/* Committed Timeline */}
+                      <div
+                        className="absolute top-0 h-5 bg-blue-200 rounded"
+                        style={{
+                          left: '0%',
+                          width: `${Math.min((committedDays / 30) * 100, 100)}%`
+                        }}
+                        onMouseEnter={() => setHoveredProject(project.id)}
+                        onMouseLeave={() => setHoveredProject(null)}
+                      />
+                      
+                      {/* Anticipated Timeline */}
+                      <div
+                        className="absolute top-6 h-5 bg-orange-200 rounded"
+                        style={{
+                          left: '0%',
+                          width: `${Math.min((anticipatedDays / 30) * 100, 100)}%`
+                        }}
+                      />
+                      
+                      {/* Hover Tooltip */}
+                      {hoveredProject === project.id && (
+                        <div className="absolute z-10 bg-gray-800 text-white p-2 rounded text-xs -top-16 left-0 whitespace-nowrap">
+                          <p>Resources: {project.projectResources.join(', ')}</p>
+                          <p>Committed: {committedEnd.toLocaleDateString()}</p>
+                          <p>Anticipated: {anticipatedEnd.toLocaleDateString()}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+        </div>
+        
+        {/* Legend */}
+        <div className="flex gap-4 mt-6 text-sm">
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 bg-blue-200 rounded"></div>
+            <span>Committed Timeline</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 bg-orange-200 rounded"></div>
+            <span>Anticipated Timeline</span>
+          </div>
+        </div>
+      </div>
+      
+      {/* Resource Utilization */}
+      <div className="mt-6 bg-white p-6 rounded-lg shadow">
+        <h3 className="text-lg font-semibold mb-4">Resource Utilization</h3>
+        <div className="space-y-3">
+          {Object.entries(calculateResourceUtilization).map(([resourceName, projects]) => {
+            const totalProjects = projects.length;
+            const efficiency = getResourceEfficiency(resourceName);
+            const utilizationPercent = Math.min((totalProjects / efficiency) * 100, 100);
+            
+            return (
+              <div key={resourceName}>
+                <div className="flex justify-between text-sm mb-1">
+                  <span>{resourceName}</span>
+                  <span>{totalProjects} project(s) - {utilizationPercent.toFixed(0)}% utilized</span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div
+                    className={`h-2 rounded-full ${
+                      utilizationPercent > 80 ? 'bg-red-500' : 
+                      utilizationPercent > 60 ? 'bg-yellow-500' : 
+                      'bg-green-500'
+                    }`}
+                    style={{ width: `${utilizationPercent}%` }}
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      
+      {/* Projects Requiring Additional Resources */}
+      <div className="mt-6 bg-white p-6 rounded-lg shadow">
+        <h3 className="text-lg font-semibold mb-4">Projects Requiring Attention</h3>
+        <div className="space-y-2">
+          {projects
+            .filter(p => {
+              const anticipated = calculateAnticipatedTimeline(p);
+              const committed = new Date(p.deliveryTimeline);
+              return anticipated > committed && p.status !== 'delivered' && p.status !== 'on pause';
+            })
+            .map(project => (
+              <div key={project.id} className="bg-red-50 p-3 rounded">
+                <p className="font-medium text-red-800">{project.projectName}</p>
+                <p className="text-sm text-red-600">
+                  Anticipated delivery exceeds committed timeline. Consider adding resources.
+                </p>
+              </div>
+            ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Resource Tab Component
+const ResourceTab = ({ resources, setResources }) => {
+  const [showAddResource, setShowAddResource] = useState(false);
+  const [editingResource, setEditingResource] = useState(null);
+  const [newResource, setNewResource] = useState({
+    name: '',
+    title: '',
+    level: 0
+  });
+
+  const levels = [
+    { value: -2, label: 'Level -2 (60% efficiency)' },
+    { value: -1, label: 'Level -1 (80% efficiency)' },
+    { value: 0, label: 'Level 0 (Standard)' },
+    { value: 1, label: 'Level +1 (120% efficiency)' },
+    { value: 2, label: 'Level +2 (140% efficiency)' },
+    { value: 3, label: 'Level +3 (160% efficiency)' }
+  ];
+
+  const addResource = () => {
+    if (newResource.name) {
+      setResources([...resources, { ...newResource, id: Date.now().toString() }]);
+      setNewResource({ name: '', title: '', level: 0 });
+      setShowAddResource(false);
+    }
+  };
+
+  const updateResource = (id, updates) => {
+    setResources(resources.map(r => r.id === id ? { ...r, ...updates } : r));
+    setEditingResource(null);
+  };
+
+  const deleteResource = (id) => {
+    setResources(resources.filter(r => r.id !== id));
+  };
+
+  return (
+    <div>
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-2xl font-bold">Resources</h2>
+        <button
+          onClick={() => setShowAddResource(true)}
+          className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 flex items-center gap-2"
+        >
+          <Plus className="w-4 h-4" />
+          Add Resource
+        </button>
+      </div>
+      
+      {/* Add Resource Modal */}
+      {showAddResource && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg w-96">
+            <h3 className="text-lg font-semibold mb-4">Add New Resource</h3>
+            <input
+              type="text"
+              placeholder="Resource Name"
+              value={newResource.name}
+              onChange={(e) => setNewResource({...newResource, name: e.target.value})}
+              className="w-full p-2 border rounded mb-3"
+            />
+            <input
+              type="text"
+              placeholder="Resource Title"
+              value={newResource.title}
+              onChange={(e) => setNewResource({...newResource, title: e.target.value})}
+              className="w-full p-2 border rounded mb-3"
+            />
+            <select
+              value={newResource.level}
+              onChange={(e) => setNewResource({...newResource, level: parseInt(e.target.value)})}
+              className="w-full p-2 border rounded mb-4"
+            >
+              {levels.map(level => (
+                <option key={level.value} value={level.value}>{level.label}</option>
+              ))}
+            </select>
+            <div className="flex gap-2">
+              <button
+                onClick={addResource}
+                className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+              >
+                Add
+              </button>
+              <button
+                onClick={() => setShowAddResource(false)}
+                className="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Resource Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {resources.map(resource => (
+          <div key={resource.id} className="bg-white p-4 rounded-lg shadow hover:shadow-lg transition-shadow">
+            {editingResource === resource.id ? (
+              <div className="space-y-3">
+                <input
+                  type="text"
+                  value={resource.name}
+                  onChange={(e) => updateResource(resource.id, { name: e.target.value })}
+                  className="w-full p-2 border rounded"
+                />
+                <input
+                  type="text"
+                  value={resource.title}
+                  onChange={(e) => updateResource(resource.id, { title: e.target.value })}
+                  className="w-full p-2 border rounded"
+                />
+                <select
+                  value={resource.level}
+                  onChange={(e) => updateResource(resource.id, { level: parseInt(e.target.value) })}
+                  className="w-full p-2 border rounded"
+                >
+                  {levels.map(level => (
+                    <option key={level.value} value={level.value}>{level.label}</option>
+                  ))}
+                </select>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setEditingResource(null)}
+                    className="bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700"
+                  >
+                    <Save className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => deleteResource(resource.id)}
+                    className="bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div 
+                className="cursor-pointer"
+                onClick={() => setEditingResource(resource.id)}
+              >
+                <h3 className="text-lg font-semibold mb-2">{resource.name}</h3>
+                <div className="hidden group-hover:block space-y-1 text-sm text-gray-600">
+                  <p><strong>Title:</strong> {resource.title || 'Not specified'}</p>
+                  <p><strong>Level:</strong> {resource.level} ({(100 + resource.level * 20)}% efficiency)</p>
+                </div>
+                <button className="mt-3 text-blue-600 hover:text-blue-800 flex items-center gap-1">
+                  <Edit2 className="w-4 h-4" />
+                  <span className="text-sm">Click to edit</span>
+                </button>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+export default App;
